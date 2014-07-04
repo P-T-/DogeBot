@@ -106,13 +106,31 @@ hook.new("raw",function(txt)
 			end
 		end
 	end)
-	txt:gsub("^:([^%s!]+)![^%s@]+@%S+ MODE (%S+) (.)(%a) (.+)",function(nick,chan,pm,mode,user)
-		if mode=="o" then
-			hook.queue(pm=="+" and "op" or "deop",nick,chan,user)
-			admin.users[user].op[chan]=pm=="+" or nil
-		elseif mode=="v" then
-			hook.queue(pm=="+" and "voice" or "devoice",nick,chan,user)
-			admin.users[user].voice[chan]=pm=="+" or nil
+	txt:gsub("^:([^%s!]+)![^%s@]+@%S+ MODE (%S+) (%S+) (.+)",function(nick,chan,modes,users)
+		local mp={}
+		local cmode="+"
+		for char in modes:gmatch(".") do
+			if char=="-" or char=="+" then
+				cmode=char
+			else
+				table.insert(mp,{cmode,char})
+			end
+		end
+		local c=1
+		for user in users:gmatch("%S+") do
+			if not mp[c] then
+				break
+			end
+			local mode=mp[c][2]
+			local pm=mp[c][1]
+			c=c+1
+			if mode=="o" then
+				hook.queue(pm=="+" and "op" or "deop",nick,chan,user)
+				admin.users[user].op[chan]=pm=="+" or nil
+			elseif mode=="v" then
+				hook.queue(pm=="+" and "voice" or "devoice",nick,chan,user)
+				admin.users[user].voice[chan]=pm=="+" or nil
+			end
 		end
 	end)
 	txt:gsub("^:%S+ 354 "..cnick.." (%S+) (%S+) (%S+) (%S+) (%S+) (%S+) (%S+) (%S+) :(.+)",function(chan,username,ip,host,server,nick,modes,account,realname)

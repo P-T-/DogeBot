@@ -217,11 +217,9 @@ function tpairs(tbl)
 	end
 end
 
-function string.tmatch(str,...)
+function string.tmatch(str,p)
 	local o={}
-	for r in str:gmatch(...) do
-		table.insert(o,r)
-	end
+	str:gsub(p,function(r) table.insert(o,r) end)
 	return o
 end
 
@@ -305,6 +303,7 @@ hook.new("raw",function(txt)
 	txt:gsub("^:"..cnick.." MODE "..cnick.." :%+i",function()
 		send("CAP REQ account-notify")
 		send("JOIN #ocbots")
+		send("JOIN #oc")
 	end)
 	txt:gsub("^PING ?(.*)",function(txt)
 		send("PONG "..txt)
