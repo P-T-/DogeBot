@@ -7,6 +7,43 @@ local rpcconf=fs.read("/home/nadine/.dogecoin/dogecoin.conf")
 local rpcuser=rpcconf:match("rpcuser=(%S+)")
 local rpcpass=rpcconf:match("rpcpassword=(%S+)")
 
+local symbol="\196\144"
+
+function conv()
+	local page=ahttp.get("http://coinmill.com/frame.js")
+	local out={}
+	for item in page:gmatch("[^|]+") do
+		out[item:match("[^,]+")]=tonumber(item:match(",([^,]+)"))
+	end
+	return function(a,b,n)
+		return n*(out[a]/out[b])
+	end
+end
+
+local function getVal(txt,int)
+	if tonumber(txt) then
+		return tonumber(txt),"doge"
+	else
+		print(txt:byte(1,-1))
+		local n=tonumber(txt:sub(1,2)=="\194\163" and txt:sub(3) or txt:sub(2))
+		if n then
+			local fmt="doge"
+			local c=conv()
+			if txt:sub(1,1)=="$" then
+				n=c("USD","XDG",n)
+				fmt="dollar"
+			elseif txt:sub(1,2)=="\194\163" then
+				n=c("GBP","XDG",n)
+				fmt="pound"
+			elseif txt:sub(1,1)~=symbol then
+				return false
+			end
+			return int and math.floor(n) or n,fmt
+		end
+	end
+	return false
+end
+
 local function req(method,...)
 	log("cli "..method.." "..serialize({...}))
 	local res,err=http.request("http://"..rpcuser..":"..rpcpass.."@127.0.0.1:22555/",json.encode({method=method,params={...}}))
@@ -83,13 +120,13 @@ end
 hook.new({"command_balance","command_bal"},function(user,chan,txt)
 	local acc=doge.accounts()
 	if txt=="" then
-		return "Ð"..(acc[doge.account(user,acc,true).name] or 0)
+		return symbol..(acc[doge.account(user,acc,true).name] or 0)
 	elseif admin.users[txt] then
-		return "Ð"..(acc[doge.account(admin.users[txt],acc,true).name] or 0)
+		return symbol..(acc[doge.account(admin.users[txt],acc,true).name] or 0)
 	elseif acc[txt] then
-		return "Ð"..(acc[txt] or 0)
+		return symbol..(acc[txt] or 0)
 	else
-		return "Ð0"
+		return symbol.."0"
 	end
 end)
 
@@ -98,13 +135,13 @@ hook.new({"command_tip","command_send"},function(user,chan,txt)
 	if not tuser then
 		return "Usage: tip <user> <amount>"
 	end
-	amount=tonumber(amount)
+	amount=getVal(amount,true)
 	if not amount then
 		return "Invalid number"
 	elseif amount%1>0 then
 		return "Tip must be an integer"
 	elseif amount<10 then
-		return "Minimum tip is Ð10"
+		return "Minimum tip is "..symbol.."10"
 	elseif not admin.users[tuser] then
 		return "No such user"
 	end
@@ -116,12 +153,12 @@ hook.new({"command_tip","command_send"},function(user,chan,txt)
 	local tacc=doge.account(admin.users[tuser],acc)
 	req("move",facc.accname,tacc.accname,amount)
 	if chan==cnick or not admin.chans[chan][tuser] then
-		send("PRIVMSG "..tuser.." :"..user.nick.." sent you Ð"..amount.."!")
+		send("PRIVMSG "..tuser.." :"..user.nick.." sent you "..symbol..amount.."!")
 	end
 	if tuser~=tacc.name then
-		return "Sent Ð"..amount.." to "..tuser.." ("..tacc.name..")"
+		return "Sent "..symbol..amount.." to "..tuser.." ("..tacc.name..")"
 	end
-	return "Sent Ð"..amount.." to "..tuser
+	return "Sent "..symbol..amount.." to "..tuser
 end)
 
 hook.new("command_steal",function(user,chan,txt)
@@ -132,7 +169,7 @@ hook.new("command_steal",function(user,chan,txt)
 	if not tuser then
 		return "Usage: steal <user> <amount>"
 	end
-	amount=tonumber(amount)
+	amount=getVal(amount,true)
 	if not amount then
 		return "Invalid number"
 	end
@@ -144,9 +181,9 @@ hook.new("command_steal",function(user,chan,txt)
 	end
 	req("move",tacc.accname,facc.accname,amount)
 	if tuser~=tacc.name then
-		return "Stole Ð"..amount.." from "..tuser.." ("..tacc.name..")"
+		return "Stole "..symbol..amount.." from "..tuser.." ("..tacc.name..")"
 	end
-	return "Stole Ð"..amount.." from "..tuser
+	return "Stole "..symbol..amount.." from "..tuser
 end)
 
 hook.new("command_withdraw",function(user,chan,txt)
@@ -163,11 +200,11 @@ hook.new("command_withdraw",function(user,chan,txt)
 	addr=addr or txt
 	amt=tonumber(amt) or acc[usr.name]
 	if amt<100 then
-		return "Minimum withdraw is Ð100"
+		return "Minimum withdraw is "..symbol.."100"
 	end
 	req("sendfrom",usr.accname,addr,amt-2)
 	req("move",usr.accname,"fee",1)
-	return "Withdrew Ð"..amt.." (-Ð2 fee)"
+	return "Withdrew "..symbol..amt.." (-"..symbol.."2 fee)"
 end)
 
 hook.new("command_deposit",function(user,chan,txt)
@@ -176,6 +213,31 @@ end)
 
 hook.new("command_help",function(user,chan,txt)
 	return "commands: tip send balance withdraw deposit"
+end)
+
+local function round(num)
+	if num==0 then
+		return num
+	end
+	local b=0.0001
+	repeat
+		num=num-(num%b)
+		b=b/10
+	until num~=0
+	return num
+end
+
+hook.new("command_conv",function(user,chan,txt)
+	local num,fmt=getVal(txt)
+	if not num then
+		return "Invalid number"
+	end
+	if fmt=="doge" then
+		local c=conv()
+		return "$"..round(c("XDG","USD",num)).." �"..round(c("XDG","GBP",num))
+	else
+		return symbol..round(num)
+	end
 end)
 
 doge.req=req

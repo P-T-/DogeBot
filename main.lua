@@ -1,5 +1,9 @@
 local socket=require("socket")
-local sv=assert(socket.connect("irc.esper.net",6667))
+local sv=socket.connect("irc.esper.net",6667)
+while not sv do
+	socket.sleep(5)
+	sv=socket.connect("irc.esper.net",6667)
+end
 local https=require("ssl.https")
 local http=require("socket.http")
 local bc=require("bc")
@@ -366,8 +370,8 @@ local _,err=xpcall(function()
 		if e=="timeout" then
 			buff=buff..r
 			while buff:match("[\r\n]") do
-				hook.queue("raw",buff:match("^[^\r\n]+"))
-				buff=buff:gsub("^[^\r\n]+[\r\n]+","")
+				hook.queue("raw",buff:match("^[^\r\n]*"))
+				buff=buff:gsub("^[^\r\n]*[\r\n]+","")
 			end
 		else
 			if e=="closed" then
