@@ -2,43 +2,60 @@ doge={}
 
 reqplugin("sql.lua")
 local db=sql.new("doge")
+local bc=require("bc")
 
 local rpcconf=fs.read("/home/nadine/.dogecoin/dogecoin.conf")
 local rpcuser=rpcconf:match("rpcuser=(%S+)")
 local rpcpass=rpcconf:match("rpcpassword=(%S+)")
 
-local symbol="\196\144"
+local symbol="\198\137"
+local csymbols={
+	["USD"]="$",
+	["XDG"]="\198\137",
+	["GBP"]="\194\163",
+	["EUR"]="\226\130\172",
+}
+local symbols={
+	["$"]="USD",
+	["\198\137"]="XDG",
+	["\196\144"]="XDG",
+	["\194\163"]="GBP",
+	["\128"]="EUR",
+	["\226\130\172"]="EUR",
+}
 
-function conv()
-	local page=ahttp.get("http://coinmill.com/frame.js")
-	local out={}
-	for item in page:gmatch("[^|]+") do
-		out[item:match("[^,]+")]=tonumber(item:match(",([^,]+)"))
-	end
-	return function(a,b,n)
-		return n*(out[a]/out[b])
+do
+	local cfunc
+	local lasttime=0
+	function conv(a,b,n)
+		if socket.gettime()-lasttime>3600 then
+			lasttime=socket.gettime()
+			local page=ahttp.get("http://coinmill.com/frame.js")
+			local out={}
+			for item in page:gmatch("[^|]+") do
+				out[item:match("[^,]+")]=tonumber(item:match(",([^,]+)"))
+			end
+			cfunc=function(a,b,n)
+				assert(out[a],"No such currency "..a)
+				assert(out[b],"No such currency "..b)
+				return n*(out[a]/out[b])
+			end
+		end
+		return cfunc(a,b,n)
 	end
 end
 
 local function getVal(txt,int)
 	if tonumber(txt) then
-		return tonumber(txt),"doge"
+		return tonumber(txt),"XDG",tonumber(txt)
 	else
-		print(txt:byte(1,-1))
-		local n=tonumber(txt:sub(1,2)=="\194\163" and txt:sub(3) or txt:sub(2))
-		if n then
-			local fmt="doge"
-			local c=conv()
-			if txt:sub(1,1)=="$" then
-				n=c("USD","XDG",n)
-				fmt="dollar"
-			elseif txt:sub(1,2)=="\194\163" then
-				n=c("GBP","XDG",n)
-				fmt="pound"
-			elseif txt:sub(1,1)~=symbol then
-				return false
+		for k,v in pairs(symbols) do
+			local amt=txt:match("^"..k.."(.+)")
+			if amt and tonumber(amt) then
+				amt=tonumber(amt)
+				local n=conv(v,"XDG",amt)
+				return int and math.floor(n) or n,v,amt
 			end
-			return int and math.floor(n) or n,fmt
 		end
 	end
 	return false
@@ -212,31 +229,38 @@ hook.new("command_deposit",function(user,chan,txt)
 end)
 
 hook.new("command_help",function(user,chan,txt)
-	return "commands: tip send balance withdraw deposit"
+	return "commands: help tip send balance withdraw deposit conv"
 end)
 
 local function round(num)
+	local onum=num
 	if num==0 then
 		return num
 	end
+	bc.digits(100)
 	local b=0.0001
 	repeat
-		num=num-(num%b)
+		num=onum-(onum%b)
 		b=b/10
 	until num~=0
-	return num
+	return tostring(num)
 end
 
 hook.new("command_conv",function(user,chan,txt)
-	local num,fmt=getVal(txt)
+	local num,fmt,snum=getVal(txt)
 	if not num then
 		return "Invalid number"
 	end
-	if fmt=="doge" then
-		local c=conv()
-		return "$"..round(c("XDG","USD",num)).." £"..round(c("XDG","GBP",num))
+	if fmt=="XDG" then
+		local o=symbol..num.." ="
+		for k,v in pairs(csymbols) do
+			if k~="XDG" then
+				o=o.." "..v..round(conv("XDG",k,num))
+			end
+		end
+		return o
 	else
-		return symbol..round(num)
+		return csymbols[fmt]..snum.." = "..symbol..round(num)
 	end
 end)
 

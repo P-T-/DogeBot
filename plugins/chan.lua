@@ -62,26 +62,30 @@ end})
 
 hook.new("command_getprefix",function(user,chan,txt)
 	if txt~="" then
-		return "Prefix for "..txt.." is "..prefixes[txt]
+		return "Prefix for "..txt.." is "..(prefixes[txt] or "$")
 	elseif chan:sub(1,1)=="#" then
-		return "Prefix for "..chan.." is "..prefixes[chan]
+		return "Prefix for "..chan.." is "..(prefixes[chan] or "$")
 	else
 		return "Usage: getprefix <channel>"
 	end
 end)
 
 hook.new("command_setprefix",function(user,chan,txt)
-	if chan:sub(1,1)=="#" and (user.voice or user.op) then
-		if txt=="" or txt:match("%s") then
-			return "Invalid prefix"
+	if chan:sub(1,1)=="#" then
+		if (user.voice or user.op) then
+			if txt=="" or txt:match("%s") then
+				return "Invalid prefix"
+			end
+			if not prefixes[chan] then
+				prefix.insert({chan=chan,prefix=txt})
+			else
+				prefix.update({chan=chan},{prefix=txt})
+			end
+			prefixes[chan]=txt
+			return "Prefix set"
 		end
-		if not prefixes[chan] then
-			prefix.insert({chan=chan,prefix=txt})
-		else
-			prefix.update({chan=chan},{prefix=txt})
-		end
-		prefixes[chan]=txt
-		return "Prefix set!"
+	else
+		return "Cant set prefix in PM"
 	end
 end)
 

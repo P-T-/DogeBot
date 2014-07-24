@@ -48,9 +48,9 @@ function async.socket(sk,err)
 			end
 			hook.new("select",function()
 				local txt,err,str=sk:receive(len)
-				txt=txt or str
+				print(serialize({txt,err,str}))
 				if err~="timeout" then
-					resume(txt,err)
+					resume(err and str or txt,err)
 					stop=true
 					hook.stop()
 				elseif stop then

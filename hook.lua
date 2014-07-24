@@ -1,5 +1,6 @@
 local hooks={}
 local timers={}
+
 hook={
 	interval=nil,
 	sel={},
@@ -8,6 +9,7 @@ hook={
 	hooks=hooks,
 	timers=timers,
 }
+
 local function nxt(tbl)
 	local n=1
 	while tbl[n] do
